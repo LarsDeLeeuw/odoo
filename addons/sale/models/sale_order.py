@@ -1509,13 +1509,12 @@ class SaleOrder(models.Model):
         # sale order without "billing" access rights. However, he should not be able to create an invoice from scratch.
         return self.env['account.move'].sudo().with_context(default_move_type='out_invoice').create(invoice_vals_list)
 
-    def _create_invoices(self, grouped=False, final=False, date=None):
+    def _create_invoices(self, grouped=False, final=False):
         """ Create invoice(s) for the given Sales Order(s).
 
         :param bool grouped: if True, invoices are grouped by SO id.
             If False, invoices are grouped by keys returned by :meth:`_get_invoice_grouping_keys`
         :param bool final: if True, refunds will be generated if necessary
-        :param date: unused parameter
         :returns: created invoices
         :rtype: `account.move` recordset
         :raises: UserError if one of the orders has no invoiceable lines.
