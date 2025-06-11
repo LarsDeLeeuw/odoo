@@ -321,8 +321,6 @@ class SaleOrder(models.Model):
         string="Has Pricelist Changed", store=False)  # True if the pricelist was changed
 
     def init(self):
-        print(self.env['ir.config_parameter'].sudo().get_param('sale.customize', 'sale'))
-        print(f"odoopooooooooooooooooooooooooooooo\nodoopoooooooooooooooooooooooooooo\nodoopoooooooooooooooooooooooooooo")
         create_index(self._cr, 'sale_order_date_order_id_idx', 'sale_order', ["date_order desc", "id desc"])
 
     #=== COMPUTE METHODS ===#
