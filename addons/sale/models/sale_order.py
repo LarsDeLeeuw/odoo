@@ -29,6 +29,8 @@ from odoo.tools.mail import html_keep_url
 
 from odoo.addons.payment import utils as payment_utils
 
+from odoo.addons.sale.models.sale_order_mail import SaleOrderMail
+
 _logger = logging.getLogger(__name__)
 
 INVOICE_STATUS = [
@@ -319,6 +321,8 @@ class SaleOrder(models.Model):
         string="Has Pricelist Changed", store=False)  # True if the pricelist was changed
 
     def init(self):
+        print(self.env['ir.config_parameter'].sudo().get_param('sale.customize', 'sale'))
+        print(f"odoopooooooooooooooooooooooooooooo\nodoopoooooooooooooooooooooooooooo\nodoopoooooooooooooooooooooooooooo")
         create_index(self._cr, 'sale_order_date_order_id_idx', 'sale_order', ["date_order desc", "id desc"])
 
     #=== COMPUTE METHODS ===#
@@ -1718,12 +1722,8 @@ class SaleOrder(models.Model):
 
     @api.returns('mail.message', lambda value: value.id)
     def message_post(self, **kwargs):
-        if self.env.context.get('mark_so_as_sent'):
-            self.filtered(lambda o: o.state == 'draft').with_context(tracking_disable=True).write({'state': 'sent'})
-        so_ctx = {'mail_post_autofollow': self.env.context.get('mail_post_autofollow', True)}
-        if self.env.context.get('mark_so_as_sent') and 'mail_notify_author' not in kwargs:
-            kwargs['notify_author'] = self.env.user.partner_id.id in (kwargs.get('partner_ids') or [])
-        return super(SaleOrder, self.with_context(**so_ctx)).message_post(**kwargs)
+        so_ctx, kwargs_modifyed = SaleOrderMail(self).message_post(**kwargs)
+        return super(SaleOrder, self.with_context(**so_ctx)).message_post(**kwargs_modifyed)
 
     def _notify_get_recipients_groups(self, message, model_description, msg_vals=None):
         """ Give access button to users and portal customer as portal is integrated
