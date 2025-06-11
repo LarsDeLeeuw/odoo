@@ -97,3 +97,11 @@ class SaleOrderMail:
         elif 'state' in init_values and order.state == 'sent':
             return order.env.ref('sale.mt_order_sent')
         return False
+
+    def message_get_suggested_recipients(self, recipients):
+        order = self.order
+        if order.partner_id:
+            order._message_add_suggested_recipient(
+                recipients, partner=order.partner_id, reason=_("Customer")
+            )
+        return recipients

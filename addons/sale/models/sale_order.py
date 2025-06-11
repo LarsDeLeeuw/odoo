@@ -1707,6 +1707,7 @@ class SaleOrder(models.Model):
 
     @api.returns('mail.message', lambda value: value.id)
     def message_post(self, **kwargs):
+        self.ensure_one()
         so_ctx, kwargs_modifyed = SaleOrderMail(self).message_post(**kwargs)
         return super(SaleOrder, self.with_context(**so_ctx)).message_post(**kwargs_modifyed)
 
@@ -1714,14 +1715,15 @@ class SaleOrder(models.Model):
         """ Give access button to users and portal customer as portal is integrated
         in sale. Customer and portal group have probably no right to see
         the document so they don't have the access button. """
+        self.ensure_one()
         groups = super()._notify_get_recipients_groups(
             message, model_description, msg_vals=msg_vals
         )
-        self.ensure_one()
         return SaleOrderMail(self).notify_get_recipients_groups(groups, message, model_description, msg_vals)
 
     def _notify_by_email_prepare_rendering_context(self, message, msg_vals=False, model_description=False,
                                                    force_email_company=False, force_email_lang=False):
+        self.ensure_one()
         render_context = super()._notify_by_email_prepare_rendering_context(
             message, msg_vals, model_description=model_description,
             force_email_company=force_email_company, force_email_lang=force_email_lang
@@ -1735,12 +1737,9 @@ class SaleOrder(models.Model):
         return super()._track_subtype(init_values)
 
     def _message_get_suggested_recipients(self):
+        self.ensure_one()
         recipients = super()._message_get_suggested_recipients()
-        if self.partner_id:
-            self._message_add_suggested_recipient(
-                recipients, partner=self.partner_id, reason=_("Customer")
-            )
-        return recipients
+        return SaleOrderMail(self).message_get_suggested_recipients(recipients)
 
     # PAYMENT #
 
