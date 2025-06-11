@@ -1700,23 +1700,10 @@ class SaleOrder(models.Model):
 
     # MAIL #
 
-    def _discard_tracking(self):
-        self.ensure_one()
-        return (
-            self.state == 'draft'
-            and request and request.env.context.get('catalog_skip_tracking')
-        )
-
     def _track_finalize(self):
         """ Override of `mail` to prevent logging changes when the SO is in a draft state. """
-        if (len(self) == 1
-            # The method _track_finalize is sometimes called too early or too late and it
-            # might cause a desynchronization with the cache, thus this condition is needed.
-            and self.env.cache.contains(self, self._fields['state']) and self._discard_tracking()):
-            self.env.cr.precommit.data.pop(f'mail.tracking.{self._name}', {})
-            self.env.flush_all()
-            return
-        return super()._track_finalize()
+        if len(self) != 1 or not SaleOrderMail(self).track_finalize():
+            return super()._track_finalize()
 
     @api.returns('mail.message', lambda value: value.id)
     def message_post(self, **kwargs):
@@ -1730,46 +1717,8 @@ class SaleOrder(models.Model):
         groups = super()._notify_get_recipients_groups(
             message, model_description, msg_vals=msg_vals
         )
-        if not self:
-            return groups
-
         self.ensure_one()
-        if self._context.get('proforma'):
-            for group in [g for g in groups if g[0] in ('portal_customer', 'portal', 'follower', 'customer')]:
-                group[2]['has_button_access'] = False
-            return groups
-        local_msg_vals = dict(msg_vals or {})
-
-        # portal customers have full access (existence not granted, depending on partner_id)
-        try:
-            customer_portal_group = next(group for group in groups if group[0] == 'portal_customer')
-        except StopIteration:
-            pass
-        else:
-            access_opt = customer_portal_group[2].setdefault('button_access', {})
-            is_tx_pending = self.get_portal_last_transaction().state == 'pending'
-            if self._has_to_be_signed():
-                if self._has_to_be_paid():
-                    access_opt['title'] = _("View Quotation") if is_tx_pending else _("Sign & Pay Quotation")
-                else:
-                    access_opt['title'] = _("Accept & Sign Quotation")
-            elif self._has_to_be_paid() and not is_tx_pending:
-                access_opt['title'] = _("Accept & Pay Quotation")
-            elif self.state in ('draft', 'sent'):
-                access_opt['title'] = _("View Quotation")
-
-        # enable followers that have access through portal
-        follower_group = next(group for group in groups if group[0] == 'follower')
-        follower_group[2]['active'] = True
-        follower_group[2]['has_button_access'] = True
-        access_opt = follower_group[2].setdefault('button_access', {})
-        if self.state in ('draft', 'sent'):
-            access_opt['title'] = _("View Quotation")
-        else:
-            access_opt['title'] = _("View Order")
-        access_opt['url'] = self._notify_get_action_link('view', **local_msg_vals)
-
-        return groups
+        return SaleOrderMail(self).notify_get_recipients_groups(groups, message, model_description, msg_vals)
 
     def _notify_by_email_prepare_rendering_context(self, message, msg_vals=False, model_description=False,
                                                    force_email_company=False, force_email_lang=False):
@@ -1777,29 +1726,12 @@ class SaleOrder(models.Model):
             message, msg_vals, model_description=model_description,
             force_email_company=force_email_company, force_email_lang=force_email_lang
         )
-        lang_code = render_context.get('lang')
-        record = render_context['record']
-        subtitles = [f"{record.name} - {record.partner_id.name}" if record.partner_id else record.name]
-        if self.amount_total:
-            # Do not show the price in subtitles if zero (e.g. e-commerce orders are created empty)
-            subtitles.append(
-                format_amount(self.env, self.amount_total, self.currency_id, lang_code=lang_code),
-            )
-
-        render_context['subtitles'] = subtitles
-        return render_context
-
-    def _phone_get_number_fields(self):
-        """ No phone or mobile field is available on sale model. Instead SMS will
-        fallback on partner-based computation using ``_mail_get_partner_fields``. """
-        return []
+        return SaleOrderMail(self).notify_by_email_prepare_rendering_context(render_context)
 
     def _track_subtype(self, init_values):
         self.ensure_one()
-        if 'state' in init_values and self.state == 'sale':
-            return self.env.ref('sale.mt_order_confirmed')
-        elif 'state' in init_values and self.state == 'sent':
-            return self.env.ref('sale.mt_order_sent')
+        if (result := SaleOrderMail(self).track_subtype(init_values)):
+            return result
         return super()._track_subtype(init_values)
 
     def _message_get_suggested_recipients(self):
