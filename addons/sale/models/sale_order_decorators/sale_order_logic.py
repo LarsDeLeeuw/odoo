@@ -62,7 +62,6 @@ class SaleOrderLogic(SaleOrderLogicInterface):
 
         :return: None
         """
-        # TODO: Untested
         orders = self.orders
         orders.with_context(send_email=True).action_confirm()
 
