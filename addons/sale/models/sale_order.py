@@ -336,7 +336,7 @@ class SaleOrder(models.Model):
                 else:
                     _logger.warning(f"[sale.customize] Invalid customization type: should end with 'sale' — using default 'sale'.")
                 for name in it:
-                    class_type = cls._decorator_map.get(name, None)
+                    class_type = _decorator_map.get(name, None)
                     if class_type is None:
                         _logger.warning(f"[sale.customize] Unknown customization type: '{name}' — skipping.")
                     else:
@@ -2268,4 +2268,4 @@ class SaleOrder(models.Model):
 
         :return: None
         """
-        return self._LogicDecoratorBuilder.get_logic_interface(self).validate_order()
+        return self._LogicDecoratorBuilder.get_logic_interface(self)._validate_order()

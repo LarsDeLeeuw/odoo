@@ -1,6 +1,6 @@
 from odoo.tests.common import TransactionCase, tagged 
 
-@tagged('-at_install', 'post_install', 'mytest')
+@tagged('-at_install', 'post_install')
 class TestSaleOrderTrackSubtype(TransactionCase):
 
     def setUp(self):

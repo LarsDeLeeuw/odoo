@@ -16,7 +16,7 @@ class SaleOrderDecoratorInterface(SaleOrderLogicInterface):
         :rtype: bool
         :raise: UserError if trying to confirm cancelled SO's
         """
-        self.child.action_confirm()
+        return self.child.action_confirm()
 
 
     def _action_cancel(self):
@@ -24,7 +24,7 @@ class SaleOrderDecoratorInterface(SaleOrderLogicInterface):
 
         only executed for post-cancel operations.
         """
-        self.child._action_cancel()
+        return self.child._action_cancel()
 
     def _validate_order(self):
         """
