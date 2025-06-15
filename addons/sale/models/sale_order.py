@@ -7,6 +7,9 @@ from collections import defaultdict
 from datetime import timedelta
 from itertools import groupby
 
+
+from odoo.addons.sale.models.sale_order_decorators import _decorator_map
+from odoo.addons.sale.models.sale_order_decorators.sale_order_logic import SaleOrderLogic
 from odoo import SUPERUSER_ID, _, api, fields, models
 from odoo.exceptions import (
     AccessError,
@@ -317,6 +320,38 @@ class SaleOrder(models.Model):
         compute='_compute_has_active_pricelist')
     show_update_pricelist = fields.Boolean(
         string="Has Pricelist Changed", store=False)  # True if the pricelist was changed
+
+    class _LogicDecoratorBuilder:
+        _logic_chain = None
+
+        @classmethod
+        def _get_decorator_chain(cls, order):
+            if cls._logic_chain is None:
+                chain_str = order.env['ir.config_parameter'].sudo().get_param('sale.customize', 'sale')
+                class_names = [name.strip() for name in chain_str.split(',') if name.strip()]
+                class_chain = [SaleOrderLogic]
+                it = reversed(class_names)
+                if class_names[-1] == 'sale':
+                    next(it)
+                else:
+                    _logger.warning(f"[sale.customize] Invalid customization type: should end with 'sale' — using default 'sale'.")
+                for name in it:
+                    class_type = _decorator_map.get(name, None)
+                    if class_type is None:
+                        _logger.warning(f"[sale.customize] Unknown customization type: '{name}' — skipping.")
+                    else:
+                        class_chain.append(class_type)
+                cls._logic_chain = class_chain
+            return cls._logic_chain
+
+        @classmethod
+        def get_logic_interface(cls, order):
+            chain = cls._get_decorator_chain(order)
+            it = chain.__iter__()
+            instance = next(it)(order)
+            for logic_cls in it:
+                instance = logic_cls(order, instance)
+            return instance
 
     def init(self):
         create_index(self._cr, 'sale_order_date_order_id_idx', 'sale_order', ["date_order desc", "id desc"])
@@ -1143,35 +1178,7 @@ class SaleOrder(models.Model):
         :rtype: bool
         :raise: UserError if trying to confirm cancelled SO's
         """
-        for order in self:
-            error_msg = order._confirmation_error_message()
-            if error_msg:
-                raise UserError(error_msg)
-
-        self.order_line._validate_analytic_distribution()
-
-        for order in self:
-            if order.partner_id in order.message_partner_ids:
-                continue
-            order.message_subscribe([order.partner_id.id])
-
-        self.write(self._prepare_confirmation_values())
-
-        # Context key 'default_name' is sometimes propagated up to here.
-        # We don't need it and it creates issues in the creation of linked records.
-        context = self._context.copy()
-        context.pop('default_name', None)
-
-        self.with_context(context)._action_confirm()
-        user = self[:1].create_uid
-        if user and user.sudo().has_group('sale.group_auto_done_setting'):
-            # Public user can confirm SO, so we check the group on any record creator.
-            self.action_lock()
-
-        if self.env.context.get('send_email'):
-            self._send_order_confirmation_mail()
-
-        return True
+        return self._LogicDecoratorBuilder.get_logic_interface(self).action_confirm()
 
     def _should_be_locked(self):
         self.ensure_one()
@@ -1302,9 +1309,7 @@ class SaleOrder(models.Model):
             return self._action_cancel()
 
     def _action_cancel(self):
-        inv = self.invoice_ids.filtered(lambda inv: inv.state == 'draft')
-        inv.button_cancel()
-        return self.write({'state': 'cancel'})
+        return self._LogicDecoratorBuilder.get_logic_interface(self)._action_cancel()
 
     def _show_cancel_wizard(self):
         """ Decide whether the sale.order.cancel wizard should be shown to cancel specified orders.
@@ -1352,15 +1357,7 @@ class SaleOrder(models.Model):
         self.message_post(body=message)
 
     def _recompute_prices(self):
-        lines_to_recompute = self._get_update_prices_lines()
-        lines_to_recompute.invalidate_recordset(['pricelist_item_id'])
-        lines_to_recompute.with_context(force_price_recomputation=True)._compute_price_unit()
-        # Special case: we want to overwrite the existing discount on _recompute_prices call
-        # i.e. to make sure the discount is correctly reset
-        # if pricelist rule is different than when the price was first computed.
-        lines_to_recompute.discount = 0.0
-        lines_to_recompute._compute_discount()
-        self.show_update_pricelist = False
+        self._LogicDecoratorBuilder.get_logic_interface(self)._recompute_prices()
 
     def _default_order_line_values(self, child_field=False):
         default_data = super()._default_order_line_values(child_field)
@@ -2271,4 +2268,4 @@ class SaleOrder(models.Model):
 
         :return: None
         """
-        self.with_context(send_email=True).action_confirm()
+        return self._LogicDecoratorBuilder.get_logic_interface(self)._validate_order()

@@ -15,6 +15,8 @@ from . import test_sale_order
 from . import test_sale_order_cancel
 from . import test_sale_order_discount
 from . import test_sale_order_down_payment
+from . import test_sale_order_mail
+from . import test_sale_order_decorator
 from . import test_sale_prices
 from . import test_sale_product_attribute_value_config
 from . import test_sale_product_template
